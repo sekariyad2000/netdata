@@ -108,11 +108,15 @@ class NetdataLLMAgent:
 
             if model in SUPPORTED_MODELS["openai"]:
                 return ChatOpenAI(model=model)
+            else:
+                raise ValueError(f"Model {model} not supported for OpenAI platform.")
         elif self.platform == "anthropic":
             from langchain_anthropic import ChatAnthropic
 
             if model in SUPPORTED_MODELS["anthropic"]:
                 return ChatAnthropic(model=model)
+            else:
+                raise ValueError(f"Model {model} not supported for Anthropic platform.")
         elif self.platform == "ollama":
             from langchain_ollama import ChatOllama
 
@@ -121,9 +125,7 @@ class NetdataLLMAgent:
             else:
                 raise ValueError(f"Model {model} not supported for Ollama platform.")
         else:
-            raise ValueError(
-                f"Platform {self.platform} and model {model} not supported."
-            )
+            raise ValueError(f"Platform {self.platform} not supported.")
 
     def _create_system_prompt(self, base_prompt: str, netdata_host_urls: list) -> str:
         """

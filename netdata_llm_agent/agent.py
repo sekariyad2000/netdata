@@ -51,7 +51,7 @@ General Notes:
 SUPPORTED_MODELS = {
     "openai": ["gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"],
     "anthropic": ["claude-3-5-sonnet-20241022"],
-    "ollama": ["llama3.1"],
+    "ollama": ["llama2", "mistral", "codellama"],
 }
 
 
@@ -61,15 +61,15 @@ class NetdataLLMAgent:
 
     Args:
         netdata_host_urls: List of Netdata host urls to interact with.
-        model: Language model to use. Default is 'gpt-4o'.
+        model: Language model to use. Default is 'llama2'.
         system_prompt: System prompt to use. Default is SYSTEM_PROMPT.
-        platform: Platform to use. Default is 'openai'.
+        platform: Platform to use. Default is 'ollama'.
     """
 
     def __init__(
         self,
         netdata_host_urls: list,
-        model: str = "llama3.1",
+        model: str = "llama2",
         system_prompt: str = SYSTEM_PROMPT,
         platform: str = "ollama",
     ):
@@ -80,6 +80,8 @@ class NetdataLLMAgent:
         self.messages = {"messages": []}
         self.platform = platform
         self.llm = self._create_llm(model)
+        if self.llm is None:
+            raise ValueError(f"Failed to create LLM with model {model} and platform {platform}")
         self.tools = [
             tool(get_info, parse_docstring=True),
             tool(get_charts, parse_docstring=True),
@@ -103,29 +105,33 @@ class NetdataLLMAgent:
         Args:
             model: Language model to use.
         """
-        if self.platform == "openai":
-            from langchain_openai import ChatOpenAI
+        try:
+            if self.platform == "openai":
+                from langchain_openai import ChatOpenAI
 
-            if model in SUPPORTED_MODELS["openai"]:
-                return ChatOpenAI(model=model)
-            else:
-                raise ValueError(f"Model {model} not supported for OpenAI platform.")
-        elif self.platform == "anthropic":
-            from langchain_anthropic import ChatAnthropic
+                if model in SUPPORTED_MODELS["openai"]:
+                    return ChatOpenAI(model=model)
+                else:
+                    raise ValueError(f"Model {model} not supported for OpenAI platform.")
+            elif self.platform == "anthropic":
+                from langchain_anthropic import ChatAnthropic
 
-            if model in SUPPORTED_MODELS["anthropic"]:
-                return ChatAnthropic(model=model)
-            else:
-                raise ValueError(f"Model {model} not supported for Anthropic platform.")
-        elif self.platform == "ollama":
-            from langchain_ollama import ChatOllama
+                if model in SUPPORTED_MODELS["anthropic"]:
+                    return ChatAnthropic(model=model)
+                else:
+                    raise ValueError(f"Model {model} not supported for Anthropic platform.")
+            elif self.platform == "ollama":
+                from langchain_ollama import ChatOllama
 
-            if model in SUPPORTED_MODELS["ollama"]:
-                return ChatOllama(model=model)
+                if model in SUPPORTED_MODELS["ollama"]:
+                    return ChatOllama(model=model)
+                else:
+                    raise ValueError(f"Model {model} not supported for Ollama platform. Supported models are: {SUPPORTED_MODELS['ollama']}")
             else:
-                raise ValueError(f"Model {model} not supported for Ollama platform.")
-        else:
-            raise ValueError(f"Platform {self.platform} not supported.")
+                raise ValueError(f"Platform {self.platform} not supported.")
+        except Exception as e:
+            print(f"Error creating LLM: {str(e)}")
+            raise
 
     def _create_system_prompt(self, base_prompt: str, netdata_host_urls: list) -> str:
         """

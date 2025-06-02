@@ -8,6 +8,7 @@ NetdataLLMAgent is a language model agent that can interact with Netdata API to 
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
+import concurrent.futures
 
 from netdata_llm_agent.tools import (
     get_info,
@@ -55,23 +56,32 @@ SUPPORTED_MODELS = {
 }
 
 
+def safe_invoke(llm, prompt, timeout=20):
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(llm.invoke, prompt)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            return "⚠️ Model timed out!"
+
+
 class NetdataLLMAgent:
     """
     NetdataLLMAgent is a language model agent that can interact with Netdata API to provide information about Netdata charts, chart info, and chart data.
 
     Args:
         netdata_host_urls: List of Netdata host urls to interact with.
-        model: Language model to use. Default is 'gpt-4o'.
+        model: Language model to use. Default is 'mistral'.
         system_prompt: System prompt to use. Default is SYSTEM_PROMPT.
-        platform: Platform to use. Default is 'openai'.
+        platform: Platform to use. Default is 'ollama'.
     """
 
     def __init__(
         self,
         netdata_host_urls: list,
-        model: str = "gpt-4o",
+        model: str = "mistral:latest",
         system_prompt: str = SYSTEM_PROMPT,
-        platform: str = "openai",
+        platform: str = "ollama",
     ):
         self.netdata_host_urls = netdata_host_urls
         self.system_prompt = self._create_system_prompt(
@@ -80,6 +90,9 @@ class NetdataLLMAgent:
         self.messages = {"messages": []}
         self.platform = platform
         self.llm = self._create_llm(model)
+        if self.llm is None:
+            raise ValueError(f"Failed to create LLM with model {model} and platform {platform}")
+        
         self.tools = [
             tool(get_info, parse_docstring=True),
             tool(get_charts, parse_docstring=True),
@@ -95,6 +108,9 @@ class NetdataLLMAgent:
         self.agent = create_react_agent(
             self.llm, tools=self.tools, prompt=SystemMessage(content=self.system_prompt)
         )
+
+        # For testing, let's first try direct LLM interaction
+        self.use_direct_llm = True  # Set to False to use the full agent
 
     def _create_llm(self, model: str):
         """
@@ -115,8 +131,8 @@ class NetdataLLMAgent:
 
         elif self.platform == "ollama":
             from langchain_ollama import ChatOllama
-            if model in SUPPORTED_MODELS["ollama"]:
-                return ChatOllama(model=model)
+            # Accept any model that's available in Ollama
+            return ChatOllama(model=model)
 
         # If none of the above combinations work
         raise ValueError(
@@ -163,24 +179,36 @@ class NetdataLLMAgent:
             If return_last is True, return the last message content.
             If return_thinking is True, return the new messages.
         """
-        if continue_chat:
-            self.messages["messages"].append(HumanMessage(content=message))
-        else:
-            self.messages = {"messages": [HumanMessage(content=message)]}
-        messages_updated = self.agent.invoke(self.messages)
-        len_messages_updated = len(messages_updated["messages"])
-        len_self_messages = len(self.messages["messages"])
-        new_messages = messages_updated["messages"][
-            -(len_messages_updated - len_self_messages) :
-        ]
-        self.messages = messages_updated
-        if not no_print:
-            if verbose:
-                for m in self.messages["messages"]:
-                    m.pretty_print()
+        try:
+            if self.use_direct_llm:
+                # Direct LLM interaction for testing
+                response = safe_invoke(self.llm, message)
+                if not no_print:
+                    print(response.content)
+                return response.content
+            else:
+                # Full agent interaction
+                if continue_chat:
+                    self.messages["messages"].append(HumanMessage(content=message))
                 else:
-                    self.messages["messages"][-1].pretty_print()
-        if return_last:
-            return self.messages["messages"][-1].content
-        if return_thinking:
-            return new_messages
+                    self.messages = {"messages": [HumanMessage(content=message)]}
+                messages_updated = self.agent.invoke(self.messages)
+                len_messages_updated = len(messages_updated["messages"])
+                len_self_messages = len(self.messages["messages"])
+                new_messages = messages_updated["messages"][
+                    -(len_messages_updated - len_self_messages) :
+                ]
+                self.messages = messages_updated
+                if not no_print:
+                    if verbose:
+                        for m in self.messages["messages"]:
+                            m.pretty_print()
+                    else:
+                        self.messages["messages"][-1].pretty_print()
+                if return_last:
+                    return self.messages["messages"][-1].content
+                if return_thinking:
+                    return new_messages
+        except Exception as e:
+            print(f"Error in chat: {str(e)}")
+            raise

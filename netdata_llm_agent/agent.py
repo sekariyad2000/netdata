@@ -8,8 +8,6 @@ NetdataLLMAgent is a language model agent that can interact with Netdata API to 
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from netdata_llm_agent.tools import (
     get_info,
@@ -53,7 +51,7 @@ General Notes:
 SUPPORTED_MODELS = {
     "openai": ["gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"],
     "anthropic": ["claude-3-5-sonnet-20241022"],
-    "ollama": ["llama2", "mistral", "codellama"],
+    "ollama": ["llama3.1"],
 }
 
 
@@ -63,17 +61,17 @@ class NetdataLLMAgent:
 
     Args:
         netdata_host_urls: List of Netdata host urls to interact with.
-        model: Language model to use. Default is 'llama2'.
+        model: Language model to use. Default is 'gpt-4o'.
         system_prompt: System prompt to use. Default is SYSTEM_PROMPT.
-        platform: Platform to use. Default is 'ollama'.
+        platform: Platform to use. Default is 'openai'.
     """
 
     def __init__(
         self,
         netdata_host_urls: list,
-        model: str = "llama2",
+        model: str = "gpt-4o",
         system_prompt: str = SYSTEM_PROMPT,
-        platform: str = "ollama",
+        platform: str = "openai",
     ):
         self.netdata_host_urls = netdata_host_urls
         self.system_prompt = self._create_system_prompt(
@@ -82,9 +80,6 @@ class NetdataLLMAgent:
         self.messages = {"messages": []}
         self.platform = platform
         self.llm = self._create_llm(model)
-        if self.llm is None:
-            raise ValueError(f"Failed to create LLM with model {model} and platform {platform}")
-        
         self.tools = [
             tool(get_info, parse_docstring=True),
             tool(get_charts, parse_docstring=True),
@@ -97,16 +92,9 @@ class NetdataLLMAgent:
             tool(get_netdata_docs_page, parse_docstring=True),
         ]
 
-        # Create a simpler agent first
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", self.system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-
-        agent = create_openai_tools_agent(self.llm, self.tools, prompt)
-        self.agent = AgentExecutor(agent=agent, tools=self.tools, verbose=True)
+        self.agent = create_react_agent(
+            self.llm, tools=self.tools, prompt=SystemMessage(content=self.system_prompt)
+        )
 
     def _create_llm(self, model: str):
         """
@@ -115,44 +103,26 @@ class NetdataLLMAgent:
         Args:
             model: Language model to use.
         """
-        try:
-            if self.platform == "openai":
-                from langchain_openai import ChatOpenAI
+        if self.platform == "openai":
+            from langchain_openai import ChatOpenAI
+            if model in SUPPORTED_MODELS["openai"]:
+                return ChatOpenAI(model=model)
 
-                if model in SUPPORTED_MODELS["openai"]:
-                    return ChatOpenAI(model=model)
-                else:
-                    raise ValueError(f"Model {model} not supported for OpenAI platform.")
-            elif self.platform == "anthropic":
-                from langchain_anthropic import ChatAnthropic
+        elif self.platform == "anthropic":
+            from langchain_anthropic import ChatAnthropic
+            if model in SUPPORTED_MODELS["anthropic"]:
+                return ChatAnthropic(model=model)
 
-                if model in SUPPORTED_MODELS["anthropic"]:
-                    return ChatAnthropic(model=model)
-                else:
-                    raise ValueError(f"Model {model} not supported for Anthropic platform.")
-            elif self.platform == "ollama":
-                from langchain_ollama import ChatOllama
-                from langchain_core.language_models import BaseChatModel
+        elif self.platform == "ollama":
+            from langchain_ollama import ChatOllama
+            if model in SUPPORTED_MODELS["ollama"]:
+                return ChatOllama(model=model)
 
-                if model in SUPPORTED_MODELS["ollama"]:
-                    print(f"Creating Ollama model with {model}")
-                    llm = ChatOllama(
-                        model=model,
-                        temperature=0.7,
-                        base_url="http://localhost:11434",
-                        format="json"
-                    )
-                    if not isinstance(llm, BaseChatModel):
-                        raise ValueError(f"Created LLM is not a BaseChatModel: {type(llm)}")
-                    print(f"Successfully created Ollama model: {type(llm)}")
-                    return llm
-                else:
-                    raise ValueError(f"Model {model} not supported for Ollama platform. Supported models are: {SUPPORTED_MODELS['ollama']}")
-            else:
-                raise ValueError(f"Platform {self.platform} not supported.")
-        except Exception as e:
-            print(f"Error creating LLM: {str(e)}")
-            raise
+        # If none of the above combinations work
+        raise ValueError(
+            f"Platform '{self.platform}' or model '{model}' is not supported. "
+            f"Available models: {SUPPORTED_MODELS.get(self.platform, [])}"
+        )
 
     def _create_system_prompt(self, base_prompt: str, netdata_host_urls: list) -> str:
         """
@@ -193,15 +163,24 @@ class NetdataLLMAgent:
             If return_last is True, return the last message content.
             If return_thinking is True, return the new messages.
         """
-        try:
-            response = self.agent.invoke({"input": message})
-            if not no_print:
-                print(response["output"])
-            if return_last:
-                return response["output"]
-            if return_thinking:
-                return response
-            return response["output"]
-        except Exception as e:
-            print(f"Error in chat: {str(e)}")
-            raise
+        if continue_chat:
+            self.messages["messages"].append(HumanMessage(content=message))
+        else:
+            self.messages = {"messages": [HumanMessage(content=message)]}
+        messages_updated = self.agent.invoke(self.messages)
+        len_messages_updated = len(messages_updated["messages"])
+        len_self_messages = len(self.messages["messages"])
+        new_messages = messages_updated["messages"][
+            -(len_messages_updated - len_self_messages) :
+        ]
+        self.messages = messages_updated
+        if not no_print:
+            if verbose:
+                for m in self.messages["messages"]:
+                    m.pretty_print()
+                else:
+                    self.messages["messages"][-1].pretty_print()
+        if return_last:
+            return self.messages["messages"][-1].content
+        if return_thinking:
+            return new_messages

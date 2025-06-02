@@ -44,8 +44,14 @@ def parse_args():
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt-4o-mini",
-        help="LLM model to use. Default is 'gpt-4o-mini'.",
+        default="mistral",
+        help="LLM model to use. Default is 'mistral'.",
+    )
+    parser.add_argument(
+        "--platform",
+        type=str,
+        default="ollama",
+        help="LLM platform to use. Default is 'ollama'.",
     )
     parser.add_argument(
         "--question",
@@ -144,7 +150,7 @@ class ChatCLI:
 
     def _handle_reset(self):
         self.chat_history.clear()
-        self.agent = NetdataLLMAgent(netdata_host_urls=self.agent.netdata_host_urls, model=self.agent.model)
+        self.agent = NetdataLLMAgent(netdata_host_urls=self.agent.netdata_host_urls, model=self.agent.model, platform=self.agent.platform)
         self.console.print("[green]Chat history cleared and agent reinitialized![/green]")
         self.chat_history.add_message("Chat history cleared and agent reinitialized!")
 
@@ -221,7 +227,11 @@ class ChatHistory:
 def main():
     """Main function for the CLI."""
     args = parse_args()
-    agent = NetdataLLMAgent(netdata_host_urls=args.host, model=args.model)
+    agent = NetdataLLMAgent(
+        netdata_host_urls=args.host,
+        model=args.model,
+        platform=args.platform
+    )
     cli = ChatCLI(agent)
 
     if args.question:

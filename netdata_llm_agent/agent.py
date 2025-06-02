@@ -52,7 +52,7 @@ General Notes:
 SUPPORTED_MODELS = {
     "openai": ["gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"],
     "anthropic": ["claude-3-5-sonnet-20241022"],
-    "ollama": ["llama3.1"],
+    "ollama": ["llama3.1", "mistral", "mistral:latest"],
 }
 
 

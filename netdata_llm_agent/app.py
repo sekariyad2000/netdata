@@ -26,9 +26,8 @@ def init_session_state():
     if "agent" not in st.session_state:
         st.session_state.agent = NetdataLLMAgent(
             netdata_host_urls=st.session_state.netdata_urls,
-            model="mistral",
-            platform="ollama",
-            use_tools=False  # Disable tools for now
+            model="llama3.1:8b",
+            platform="ollama"
         )
     if "conversation" not in st.session_state:
         st.session_state.conversation = []
@@ -55,9 +54,8 @@ def sidebar_config():
         st.session_state.netdata_urls = new_urls
         st.session_state.agent = NetdataLLMAgent(
             netdata_host_urls=new_urls,
-            model="mistral",
-            platform="ollama",
-            use_tools=False  # Disable tools for now
+            model="llama3.1:8b",
+            platform="ollama"
         )
         st.session_state.conversation = []
         st.rerun()
@@ -75,9 +73,8 @@ def sidebar_config():
     if st.sidebar.button("Clear Chat"):
         st.session_state.agent = NetdataLLMAgent(
             netdata_host_urls=st.session_state.netdata_urls,
-            model="mistral",
-            platform="ollama",
-            use_tools=False  # Disable tools for now
+            model="llama3.1:8b",
+            platform="ollama"
         )
         st.session_state.conversation = []
         st.rerun()

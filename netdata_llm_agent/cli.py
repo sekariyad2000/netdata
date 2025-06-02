@@ -44,8 +44,8 @@ def parse_args():
     parser.add_argument(
         "--model",
         type=str,
-        default="mistral",
-        help="LLM model to use. Default is 'mistral'.",
+        default="llama3.1:8b",
+        help="LLM model to use. Default is 'llama3.1:8b'.",
     )
     parser.add_argument(
         "--platform",
@@ -57,11 +57,6 @@ def parse_args():
         "--question",
         type=str,
         help="Optional question to ask the agent. If provided, the agent will answer this question and exit.",
-    )
-    parser.add_argument(
-        "--use-tools",
-        action="store_true",
-        help="Enable tools for the agent. Default is False.",
     )
     return parser.parse_args()
 
@@ -155,12 +150,7 @@ class ChatCLI:
 
     def _handle_reset(self):
         self.chat_history.clear()
-        self.agent = NetdataLLMAgent(
-            netdata_host_urls=self.agent.netdata_host_urls,
-            model=self.agent.model,
-            platform=self.agent.platform,
-            use_tools=False  # Keep tools disabled on reset
-        )
+        self.agent = NetdataLLMAgent(netdata_host_urls=self.agent.netdata_host_urls, model=self.agent.model, platform=self.agent.platform)
         self.console.print("[green]Chat history cleared and agent reinitialized![/green]")
         self.chat_history.add_message("Chat history cleared and agent reinitialized!")
 
@@ -240,8 +230,7 @@ def main():
     agent = NetdataLLMAgent(
         netdata_host_urls=args.host,
         model=args.model,
-        platform=args.platform,
-        use_tools=args.use_tools
+        platform=args.platform
     )
     cli = ChatCLI(agent)
 

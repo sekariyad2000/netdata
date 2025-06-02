@@ -109,8 +109,8 @@ class NetdataLLMAgent:
             self.llm, tools=self.tools, prompt=SystemMessage(content=self.system_prompt)
         )
 
-        # For testing, let's first try direct LLM interaction
-        self.use_direct_llm = True  # Set to False to use the full agent
+        # Use the full agent with tools
+        self.use_direct_llm = False  # Changed to False to use the full agent
 
     def _create_llm(self, model: str):
         """

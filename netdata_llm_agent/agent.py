@@ -122,9 +122,20 @@ class NetdataLLMAgent:
                     raise ValueError(f"Model {model} not supported for Anthropic platform.")
             elif self.platform == "ollama":
                 from langchain_ollama import ChatOllama
+                from langchain_core.language_models import BaseChatModel
 
                 if model in SUPPORTED_MODELS["ollama"]:
-                    return ChatOllama(model=model)
+                    print(f"Creating Ollama model with {model}")
+                    llm = ChatOllama(
+                        model=model,
+                        temperature=0.7,
+                        base_url="http://localhost:11434",
+                        format="json"
+                    )
+                    if not isinstance(llm, BaseChatModel):
+                        raise ValueError(f"Created LLM is not a BaseChatModel: {type(llm)}")
+                    print(f"Successfully created Ollama model: {type(llm)}")
+                    return llm
                 else:
                     raise ValueError(f"Model {model} not supported for Ollama platform. Supported models are: {SUPPORTED_MODELS['ollama']}")
             else:

@@ -27,7 +27,8 @@ def init_session_state():
         st.session_state.agent = NetdataLLMAgent(
             netdata_host_urls=st.session_state.netdata_urls,
             model="mistral",
-            platform="ollama"
+            platform="ollama",
+            use_tools=False  # Disable tools for now
         )
     if "conversation" not in st.session_state:
         st.session_state.conversation = []
@@ -55,7 +56,8 @@ def sidebar_config():
         st.session_state.agent = NetdataLLMAgent(
             netdata_host_urls=new_urls,
             model="mistral",
-            platform="ollama"
+            platform="ollama",
+            use_tools=False  # Disable tools for now
         )
         st.session_state.conversation = []
         st.rerun()
@@ -74,7 +76,8 @@ def sidebar_config():
         st.session_state.agent = NetdataLLMAgent(
             netdata_host_urls=st.session_state.netdata_urls,
             model="mistral",
-            platform="ollama"
+            platform="ollama",
+            use_tools=False  # Disable tools for now
         )
         st.session_state.conversation = []
         st.rerun()

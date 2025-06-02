@@ -74,6 +74,7 @@ class NetdataLLMAgent:
         model: Language model to use. Default is 'mistral'.
         system_prompt: System prompt to use. Default is SYSTEM_PROMPT.
         platform: Platform to use. Default is 'ollama'.
+        use_tools: If True, use tools. Default is False.
     """
 
     def __init__(
@@ -82,6 +83,7 @@ class NetdataLLMAgent:
         model: str = "mistral:latest",
         system_prompt: str = SYSTEM_PROMPT,
         platform: str = "ollama",
+        use_tools: bool = False,
     ):
         self.netdata_host_urls = netdata_host_urls
         self.system_prompt = self._create_system_prompt(
@@ -93,24 +95,28 @@ class NetdataLLMAgent:
         if self.llm is None:
             raise ValueError(f"Failed to create LLM with model {model} and platform {platform}")
         
-        self.tools = [
-            tool(get_info, parse_docstring=True),
-            tool(get_charts, parse_docstring=True),
-            tool(get_chart_info, parse_docstring=True),
-            tool(get_chart_data, parse_docstring=True),
-            tool(get_alarms, parse_docstring=True),
-            tool(get_current_metrics, parse_docstring=True),
-            tool(get_anomaly_rates, parse_docstring=True),
-            tool(get_netdata_docs_sitemap, parse_docstring=True),
-            tool(get_netdata_docs_page, parse_docstring=True),
-        ]
+        # Only set up tools and agent if use_tools is True
+        if use_tools:
+            self.tools = [
+                tool(get_info, parse_docstring=True),
+                tool(get_charts, parse_docstring=True),
+                tool(get_chart_info, parse_docstring=True),
+                tool(get_chart_data, parse_docstring=True),
+                tool(get_alarms, parse_docstring=True),
+                tool(get_current_metrics, parse_docstring=True),
+                tool(get_anomaly_rates, parse_docstring=True),
+                tool(get_netdata_docs_sitemap, parse_docstring=True),
+                tool(get_netdata_docs_page, parse_docstring=True),
+            ]
+            self.agent = create_react_agent(
+                self.llm, tools=self.tools, prompt=SystemMessage(content=self.system_prompt)
+            )
+        else:
+            self.tools = []
+            self.agent = None
 
-        self.agent = create_react_agent(
-            self.llm, tools=self.tools, prompt=SystemMessage(content=self.system_prompt)
-        )
-
-        # For testing, let's first try direct LLM interaction
-        self.use_direct_llm = True  # Set to False to use the full agent
+        # Always use direct LLM interaction by default
+        self.use_direct_llm = True
 
     def _create_llm(self, model: str):
         """
@@ -180,35 +186,11 @@ class NetdataLLMAgent:
             If return_thinking is True, return the new messages.
         """
         try:
-            if self.use_direct_llm:
-                # Direct LLM interaction for testing
-                response = safe_invoke(self.llm, message)
-                if not no_print:
-                    print(response.content)
-                return response.content
-            else:
-                # Full agent interaction
-                if continue_chat:
-                    self.messages["messages"].append(HumanMessage(content=message))
-                else:
-                    self.messages = {"messages": [HumanMessage(content=message)]}
-                messages_updated = self.agent.invoke(self.messages)
-                len_messages_updated = len(messages_updated["messages"])
-                len_self_messages = len(self.messages["messages"])
-                new_messages = messages_updated["messages"][
-                    -(len_messages_updated - len_self_messages) :
-                ]
-                self.messages = messages_updated
-                if not no_print:
-                    if verbose:
-                        for m in self.messages["messages"]:
-                            m.pretty_print()
-                    else:
-                        self.messages["messages"][-1].pretty_print()
-                if return_last:
-                    return self.messages["messages"][-1].content
-                if return_thinking:
-                    return new_messages
+            # Always use direct LLM interaction for now
+            response = safe_invoke(self.llm, message)
+            if not no_print:
+                print(response.content)
+            return response.content
         except Exception as e:
             print(f"Error in chat: {str(e)}")
             raise

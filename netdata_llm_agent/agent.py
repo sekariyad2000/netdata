@@ -8,6 +8,8 @@ NetdataLLMAgent is a language model agent that can interact with Netdata API to 
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from netdata_llm_agent.tools import (
     get_info,
@@ -82,6 +84,7 @@ class NetdataLLMAgent:
         self.llm = self._create_llm(model)
         if self.llm is None:
             raise ValueError(f"Failed to create LLM with model {model} and platform {platform}")
+        
         self.tools = [
             tool(get_info, parse_docstring=True),
             tool(get_charts, parse_docstring=True),
@@ -94,9 +97,16 @@ class NetdataLLMAgent:
             tool(get_netdata_docs_page, parse_docstring=True),
         ]
 
-        self.agent = create_react_agent(
-            self.llm, tools=self.tools, prompt=SystemMessage(content=self.system_prompt)
-        )
+        # Create a simpler agent first
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", self.system_prompt),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ])
+
+        agent = create_openai_tools_agent(self.llm, self.tools, prompt)
+        self.agent = AgentExecutor(agent=agent, tools=self.tools, verbose=True)
 
     def _create_llm(self, model: str):
         """
@@ -183,24 +193,15 @@ class NetdataLLMAgent:
             If return_last is True, return the last message content.
             If return_thinking is True, return the new messages.
         """
-        if continue_chat:
-            self.messages["messages"].append(HumanMessage(content=message))
-        else:
-            self.messages = {"messages": [HumanMessage(content=message)]}
-        messages_updated = self.agent.invoke(self.messages)
-        len_messages_updated = len(messages_updated["messages"])
-        len_self_messages = len(self.messages["messages"])
-        new_messages = messages_updated["messages"][
-            -(len_messages_updated - len_self_messages) :
-        ]
-        self.messages = messages_updated
-        if not no_print:
-            if verbose:
-                for m in self.messages["messages"]:
-                    m.pretty_print()
-                else:
-                    self.messages["messages"][-1].pretty_print()
-        if return_last:
-            return self.messages["messages"][-1].content
-        if return_thinking:
-            return new_messages
+        try:
+            response = self.agent.invoke({"input": message})
+            if not no_print:
+                print(response["output"])
+            if return_last:
+                return response["output"]
+            if return_thinking:
+                return response
+            return response["output"]
+        except Exception as e:
+            print(f"Error in chat: {str(e)}")
+            raise

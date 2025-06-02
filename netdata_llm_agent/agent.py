@@ -54,6 +54,23 @@ Example workflow for getting CPU usage:
 2. Use get_chart_data(netdata_host_url, "system.cpu", after=-60, before=0, points=1) to get the latest CPU usage
 3. Present the actual values to the user
 
+Example response for CPU usage question:
+User: "What is the current CPU usage on localhost?"
+Assistant: Let me check that for you.
+
+[Tool: get_charts]
+First, I'll find the CPU-related charts.
+
+[Tool: get_chart_data]
+Now, I'll get the current CPU usage.
+
+The current CPU usage on your localhost is:
+- User CPU: 25.5%
+- System CPU: 12.3%
+- Total CPU: 37.8%
+
+This data was retrieved directly from your system's CPU metrics.
+
 Again remember always use the chart when the user inqueries information about the systems never tell them how to obtain it unless requested!
 """
 
